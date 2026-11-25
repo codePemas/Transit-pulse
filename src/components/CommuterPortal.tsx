@@ -16,13 +16,9 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   WifiOff,
-  RefreshCw
+  RefreshCw,
 } from 'lucide-react';
-import {
-  RouteItem,
-  BusTelemetry,
-  FleetIncident
-} from '@/types/transit';
+import { RouteItem, BusTelemetry, FleetIncident } from '@/types/transit';
 
 interface WalletTicketItem {
   id?: number | string;
@@ -76,13 +72,18 @@ export default function CommuterPortal({
   trackedTripId,
   onSelectRoute,
   onSelectBus,
-  onWalletMutated
+  onWalletMutated,
 }: CommuterPortalProps) {
   const [activeTab, setActiveTab] = useState<'map' | 'wallet'>('map');
-  const [walletData, setWalletData] = useState<CommuterWalletPayload | null>(null);
+  const [walletData, setWalletData] = useState<CommuterWalletPayload | null>(
+    null
+  );
   const [loadingWallet, setLoadingWallet] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [feedback, setFeedback] = useState<{
+    type: 'ok' | 'err';
+    text: string;
+  } | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [backendOffline, setBackendOffline] = useState(false);
 
@@ -91,18 +92,22 @@ export default function CommuterPortal({
   const getRouteFare = (route: RouteItem): number => {
     const raw =
       (route as unknown as Record<string, unknown>).fare_zar ??
-      (route as unknown as Record<string, unknown>).fare;
+      (route as unknown as Record<string, unknown>).fare ??
+      route.fareZar;
     return typeof raw === 'number' && raw > 0 ? raw : 15;
   };
 
   const getRouteFrequency = (route: RouteItem): string => {
     const raw = (route as unknown as Record<string, unknown>).frequency;
-    return typeof raw === 'string' && raw.trim() ? raw : 'Peak every 15 mins';
+    return typeof raw === 'string' && raw.trim()
+      ? raw
+      : 'Peak every 15 mins';
   };
 
   const getStopBaseEta = (stop: unknown, index: number): number => {
     if (stop && typeof stop === 'object') {
       const rec = stop as Record<string, unknown>;
+      if (typeof rec.baseMinutes === 'number') return rec.baseMinutes;
       if (typeof rec.baseEta === 'number') return rec.baseEta;
       if (typeof rec.eta_minutes === 'number') return rec.eta_minutes;
       if (typeof rec.eta === 'number') return rec.eta;
@@ -115,7 +120,7 @@ export default function CommuterPortal({
       if (!silent) setLoadingWallet(true);
       try {
         const res = await fetch(`${API_BASE}/ops/wallet`, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
           setBackendOffline(true);
@@ -124,9 +129,12 @@ export default function CommuterPortal({
         const data = await res.json();
         setBackendOffline(false);
         setWalletData({
-          balance_zar: typeof data.balance_zar === 'number' ? data.balance_zar : 0,
+          balance_zar:
+            typeof data.balance_zar === 'number' ? data.balance_zar : 0,
           tickets: Array.isArray(data.tickets) ? data.tickets : [],
-          transactions: Array.isArray(data.transactions) ? data.transactions : []
+          transactions: Array.isArray(data.transactions)
+            ? data.transactions
+            : [],
         });
       } catch {
         setBackendOffline(true);
@@ -141,7 +149,6 @@ export default function CommuterPortal({
     fetchWallet();
   }, [fetchWallet]);
 
-  // Keep passes & balance synced while user is on the Wallet tab (e.g. after driver validation)
   useEffect(() => {
     if (activeTab !== 'wallet') return;
     fetchWallet(true);
@@ -156,15 +163,17 @@ export default function CommuterPortal({
     if (isAnyBusy) return;
     setBusyAction(actionKey);
     setFeedback(null);
+
     try {
       const res = await fetch(`${API_BASE}/ops/wallet/topup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ amount_zar: amountZar })
+        body: JSON.stringify({ amount_zar: amountZar }),
       });
+
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         const detailText =
@@ -173,16 +182,26 @@ export default function CommuterPortal({
             : Array.isArray(data?.detail)
             ? data.detail.map((d: { msg?: string }) => d.msg).join(', ')
             : `HTTP ${res.status}`;
-        setFeedback({ type: 'err', text: `Top-up failed (${res.status}): ${detailText}` });
+        setFeedback({
+          type: 'err',
+          text: `Top-up failed (${res.status}): ${detailText}`,
+        });
         return;
       }
+
       setBackendOffline(false);
       await fetchWallet(true);
       onWalletMutated();
-      setFeedback({ type: 'ok', text: `Added R${amountZar.toFixed(2)} to Transit Pulse Pay.` });
+      setFeedback({
+        type: 'ok',
+        text: `Added R${amountZar.toFixed(2)} to Transit Pulse Pay.`,
+      });
     } catch {
       setBackendOffline(true);
-      setFeedback({ type: 'err', text: 'Backend unreachable while processing top-up.' });
+      setFeedback({
+        type: 'err',
+        text: 'Backend unreachable while processing top-up.',
+      });
     } finally {
       setBusyAction(null);
     }
@@ -194,19 +213,21 @@ export default function CommuterPortal({
     const fareZar = getRouteFare(route);
     setBusyAction(actionKey);
     setFeedback(null);
+
     try {
       const res = await fetch(`${API_BASE}/ops/tickets/buy`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           route_code: route.code,
           route_name: route.name,
-          fare_zar: fareZar
-        })
+          fare_zar: fareZar,
+        }),
       });
+
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         const detailText =
@@ -221,11 +242,17 @@ export default function CommuterPortal({
         await fetchWallet(true);
         onWalletMutated();
         const issuedCode = data?.ticket?.ticket_code || 'PASS-ISSUED';
-        setFeedback({ type: 'ok', text: `Pass ${issuedCode} ready for ${route.code}.` });
+        setFeedback({
+          type: 'ok',
+          text: `Pass ${issuedCode} ready for ${route.code}.`,
+        });
       }
     } catch {
       setBackendOffline(true);
-      setFeedback({ type: 'err', text: 'Backend unreachable while issuing pass.' });
+      setFeedback({
+        type: 'err',
+        text: 'Backend unreachable while issuing pass.',
+      });
     } finally {
       setBusyAction(null);
     }
@@ -236,29 +263,39 @@ export default function CommuterPortal({
     if (isAnyBusy) return;
     setBusyAction(actionKey);
     setFeedback(null);
+
     try {
       const res = await fetch(`${API_BASE}/ops/tickets/validate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ ticket_code: ticketCode })
+        body: JSON.stringify({ ticket_code: ticketCode }),
       });
+
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setFeedback({ type: 'err', text: data?.detail || 'Validation error' });
+        setFeedback({
+          type: 'err',
+          text: data?.detail || 'Validation error',
+        });
       } else {
         setBackendOffline(false);
         await fetchWallet(true);
         setFeedback({
           type: 'ok',
-          text: `Boarded! Pass ${ticketCode} validated at ${data?.validated_at ?? 'now'}.`
+          text: `Boarded! Pass ${ticketCode} validated at ${
+            data?.validated_at ?? 'now'
+          }.`,
         });
       }
     } catch {
       setBackendOffline(true);
-      setFeedback({ type: 'err', text: 'Unable to validate pass right now.' });
+      setFeedback({
+        type: 'err',
+        text: 'Unable to validate pass right now.',
+      });
     } finally {
       setBusyAction(null);
     }
@@ -275,19 +312,23 @@ export default function CommuterPortal({
   const activeRouteIncidents = incidents.filter(
     (inc) => inc.is_active && inc.route_code === selectedRoute.code
   );
-  const routeDelay = activeRouteIncidents.reduce((sum, inc) => sum + inc.delay_minutes, 0);
+  const routeDelay = activeRouteIncidents.reduce(
+    (sum, inc) => sum + inc.delay_minutes,
+    0
+  );
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {backendOffline && (
-        <div className="px-3 py-2 bg-amber-500/15 border-b border-amber-500/35 text-amber-200 text-[11px] flex items-center justify-between gap-2">
+        <div className="px-3 py-2 bg-amber-500/15 border-b border-amber-500/35 text-amber-200 text-[11px] flex items-center justify-between gap-2 shrink-0">
           <span className="flex items-center gap-1.5 font-medium">
             <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            Live backend paused — showing latest cached state.
+            Live backend paused - showing latest cached state.
           </span>
           <button
+            type="button"
             onClick={() => fetchWallet(true)}
-            className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 font-semibold shrink-0"
+            className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 font-semibold shrink-0"
           >
             Retry
           </button>
@@ -295,28 +336,30 @@ export default function CommuterPortal({
       )}
 
       {/* Thumb-friendly Mode Switcher */}
-      <div className="grid grid-cols-2 p-2.5 sm:p-3 gap-2 border-b border-slate-800 bg-slate-950/40 shrink-0">
+      <div className="grid grid-cols-2 p-2.5 sm:p-3 gap-2 border-b border-slate-800 bg-slate-950/60 shrink-0">
         <button
+          type="button"
           onClick={() => setActiveTab('map')}
-          className={`min-h-[42px] py-2 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 ${
+          className={`min-h-[44px] py-2 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 ${
             activeTab === 'map'
               ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
               : 'bg-slate-800/70 text-slate-400 hover:text-white'
           }`}
         >
           <Navigation className="w-3.5 h-3.5 shrink-0" />
-          <span>Live Map & ETA</span>
+          <span>Routes &amp; ETA</span>
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab('wallet')}
-          className={`min-h-[42px] py-2 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 ${
+          className={`min-h-[44px] py-2 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 ${
             activeTab === 'wallet'
               ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
               : 'bg-slate-800/70 text-slate-400 hover:text-white'
           }`}
         >
           <Wallet className="w-3.5 h-3.5 shrink-0" />
-          <span>Fare Wallet & QR</span>
+          <span>Fare Wallet &amp; QR</span>
         </button>
       </div>
 
@@ -341,6 +384,7 @@ export default function CommuterPortal({
 
                 return (
                   <button
+                    type="button"
                     key={`${route.id}-${route.code}-${rIdx}`}
                     onClick={() => onSelectRoute(route)}
                     className={`w-full text-left p-3 sm:p-3.5 rounded-xl border transition-all ${
@@ -352,7 +396,10 @@ export default function CommuterPortal({
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <span
                         className="text-xs font-bold px-2 py-0.5 rounded"
-                        style={{ backgroundColor: `${route.color}25`, color: route.color }}
+                        style={{
+                          backgroundColor: `${route.color}25`,
+                          color: route.color,
+                        }}
                       >
                         {route.code}
                       </span>
@@ -367,8 +414,12 @@ export default function CommuterPortal({
                         </span>
                       </div>
                     </div>
-                    <p className="font-medium text-sm text-slate-100 leading-snug">{route.name}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{getRouteFrequency(route)}</p>
+                    <p className="font-medium text-sm text-slate-100 leading-snug">
+                      {route.name}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {getRouteFrequency(route)}
+                    </p>
                   </button>
                 );
               })}
@@ -381,11 +432,12 @@ export default function CommuterPortal({
               <Navigation className="w-3.5 h-3.5 text-blue-400 shrink-0" />
               Live Municipal Fleet
             </h2>
-            <div className="grid grid-cols-1 xs:grid-cols-3 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {buses.map((bus, bIdx) => {
                 const isSelected = bus.trip_id === trackedTripId;
                 return (
                   <button
+                    type="button"
                     key={`${bus.trip_id}-${bus.vehicle_plate}-${bIdx}`}
                     onClick={() => onSelectBus(bus)}
                     className={`min-h-[56px] p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
@@ -398,8 +450,12 @@ export default function CommuterPortal({
                       {bus.vehicle_plate}
                     </p>
                     <div className="flex items-center justify-between gap-1 mt-1">
-                      <span className="text-[10px] font-mono text-blue-400">{bus.route_code}</span>
-                      <span className="text-[10px] text-slate-500">{bus.occupancy}</span>
+                      <span className="text-[10px] font-mono text-blue-400">
+                        {bus.route_code}
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        {bus.occupancy}
+                      </span>
                     </div>
                   </button>
                 );
@@ -458,7 +514,9 @@ export default function CommuterPortal({
                       {index + 1}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-200 truncate">{stop.name}</p>
+                      <p className="text-sm font-medium text-slate-200 truncate">
+                        {stop.name}
+                      </p>
                       <p className="text-[11px] font-mono text-slate-500 flex items-center gap-1 mt-0.5 truncate">
                         <MapPin className="w-3 h-3 shrink-0" />
                         {stop.coords[0].toFixed(3)}, {stop.coords[1].toFixed(3)}
@@ -506,7 +564,11 @@ export default function CommuterPortal({
                 title="Refresh wallet"
                 className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-blue-100 transition"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${loadingWallet ? 'animate-spin' : ''}`} />
+                <RefreshCw
+                  className={`w-3.5 h-3.5 ${
+                    loadingWallet ? 'animate-spin' : ''
+                  }`}
+                />
               </button>
             </div>
             <p className="text-2xl sm:text-3xl font-bold font-mono mt-2">
@@ -517,19 +579,23 @@ export default function CommuterPortal({
                 type="button"
                 disabled={isAnyBusy}
                 onClick={() => handleTopUp(50)}
-                className="min-h-[42px] py-2 px-3 rounded-xl bg-white/15 hover:bg-white/25 disabled:opacity-50 text-xs font-bold transition flex items-center justify-center gap-1"
+                className="min-h-[44px] py-2 px-3 rounded-xl bg-white/15 hover:bg-white/25 disabled:opacity-50 text-xs font-bold transition flex items-center justify-center gap-1"
               >
                 <Plus className="w-3.5 h-3.5 shrink-0" />
-                <span>{busyAction === 'topup-50' ? 'Adding...' : 'R50 Top Up'}</span>
+                <span>
+                  {busyAction === 'topup-50' ? 'Adding...' : 'R50 Top Up'}
+                </span>
               </button>
               <button
                 type="button"
                 disabled={isAnyBusy}
                 onClick={() => handleTopUp(100)}
-                className="min-h-[42px] py-2 px-3 rounded-xl bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50 text-xs font-bold transition flex items-center justify-center gap-1"
+                className="min-h-[44px] py-2 px-3 rounded-xl bg-white text-blue-700 hover:bg-blue-50 disabled:opacity-50 text-xs font-bold transition flex items-center justify-center gap-1"
               >
                 <Plus className="w-3.5 h-3.5 shrink-0" />
-                <span>{busyAction === 'topup-100' ? 'Adding...' : 'R100 Top Up'}</span>
+                <span>
+                  {busyAction === 'topup-100' ? 'Adding...' : 'R100 Top Up'}
+                </span>
               </button>
             </div>
           </div>
@@ -550,7 +616,7 @@ export default function CommuterPortal({
                   >
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-white leading-snug">
-                        {route.code} • {route.name}
+                        {route.code} {route.name}
                       </p>
                       <p className="text-[11px] text-slate-400 mt-0.5">
                         Valid on any municipal bus on corridor
@@ -560,9 +626,11 @@ export default function CommuterPortal({
                       type="button"
                       disabled={isAnyBusy}
                       onClick={() => handleBuyTicket(route)}
-                      className="min-h-[38px] w-full sm:w-auto px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition shrink-0"
+                      className="min-h-[40px] w-full sm:w-auto px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition shrink-0"
                     >
-                      {buyingThis ? 'Issuing...' : `Buy R${fare.toFixed(2)}`}
+                      {buyingThis
+                        ? 'Issuing...'
+                        : `Buy R${fare.toFixed(2)}`}
                     </button>
                   </div>
                 );
@@ -573,7 +641,7 @@ export default function CommuterPortal({
           {/* Active & Recent Passes */}
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5">
-              Active & Recent Passes
+              Active &amp; Recent Passes
             </h3>
             {loadingWallet && !walletData ? (
               <p className="text-xs text-slate-500">Syncing passes...</p>
@@ -583,7 +651,8 @@ export default function CommuterPortal({
               <div className="space-y-2">
                 {walletData.tickets.map((t: WalletTicketItem, tIdx: number) => {
                   const ticketFare = Number(t.fare_zar ?? t.fare ?? 15);
-                  const validatingThis = busyAction === `validate-${t.ticket_code}`;
+                  const validatingThis =
+                    busyAction === `validate-${t.ticket_code}`;
                   return (
                     <div
                       key={`ticket-${t.id ?? 'na'}-${t.ticket_code}-${tIdx}`}
@@ -593,7 +662,7 @@ export default function CommuterPortal({
                         <span className="text-xs font-bold text-white flex items-center gap-1.5">
                           <QrCode className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                           <span>
-                            {t.route_code} — R{ticketFare.toFixed(2)}
+                            {t.route_code} - R{ticketFare.toFixed(2)}
                           </span>
                         </span>
                         <span
@@ -614,11 +683,12 @@ export default function CommuterPortal({
                         <button
                           type="button"
                           onClick={() => handleCopyCode(t.ticket_code)}
-                          className="min-h-[30px] px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-semibold text-slate-300 flex items-center gap-1 shrink-0"
+                          className="min-h-[32px] px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-semibold text-slate-300 flex items-center gap-1 shrink-0"
                         >
                           {copiedCode === t.ticket_code ? (
                             <>
-                              <Check className="w-3 h-3 text-emerald-400" /> Copied
+                              <Check className="w-3 h-3 text-emerald-400" />{' '}
+                              Copied
                             </>
                           ) : (
                             <>
@@ -633,9 +703,11 @@ export default function CommuterPortal({
                           type="button"
                           disabled={isAnyBusy}
                           onClick={() => handleValidateTicket(t.ticket_code)}
-                          className="min-h-[38px] w-full py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 disabled:opacity-50 border border-blue-500/40 text-blue-300 text-xs font-semibold transition"
+                          className="min-h-[40px] w-full py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 disabled:opacity-50 border border-blue-500/40 text-blue-300 text-xs font-semibold transition"
                         >
-                          {validatingThis ? 'Validating...' : 'Tap Self-Check-In Scanner'}
+                          {validatingThis
+                            ? 'Validating...'
+                            : 'Tap Self-Check-In Scanner'}
                         </button>
                       )}
                     </div>
@@ -651,11 +723,14 @@ export default function CommuterPortal({
               Recent Wallet Activity
             </h3>
             {!walletData || walletData.transactions.length === 0 ? (
-              <p className="text-xs text-slate-500">No transactions recorded yet.</p>
+              <p className="text-xs text-slate-500">
+                No transactions recorded yet.
+              </p>
             ) : (
               <div className="space-y-1.5">
                 {walletData.transactions.slice(0, 6).map((tx) => {
-                  const isTopup = tx.tx_type === 'TOPUP' || Number(tx.amount_zar) > 0;
+                  const isTopup =
+                    tx.tx_type === 'TOPUP' || Number(tx.amount_zar) > 0;
                   return (
                     <div
                       key={tx.id}
@@ -676,8 +751,12 @@ export default function CommuterPortal({
                           )}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-medium text-slate-200 truncate">{tx.title}</p>
-                          <p className="text-[10px] font-mono text-slate-500">{tx.created_at}</p>
+                          <p className="text-xs font-medium text-slate-200 truncate">
+                            {tx.title}
+                          </p>
+                          <p className="text-[10px] font-mono text-slate-500">
+                            {tx.created_at}
+                          </p>
                         </div>
                       </div>
                       <span
@@ -685,7 +764,8 @@ export default function CommuterPortal({
                           isTopup ? 'text-emerald-400' : 'text-slate-300'
                         }`}
                       >
-                        {isTopup ? '+' : '-'}R{Math.abs(Number(tx.amount_zar)).toFixed(2)}
+                        {isTopup ? '+' : '-'}R
+                        {Math.abs(Number(tx.amount_zar)).toFixed(2)}
                       </span>
                     </div>
                   );

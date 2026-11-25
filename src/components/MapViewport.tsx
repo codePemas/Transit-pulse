@@ -6,12 +6,30 @@ import 'leaflet/dist/leaflet.css';
 import { Radio, Gauge, Clock, MapPin } from 'lucide-react';
 import { RouteItem, BusTelemetry, computePredictedEta } from '@/types/transit';
 
-const MapContainer = dynamic(() => import('react-leaflet').then((mod) => mod.MapContainer), { ssr: false });
-const TileLayer = dynamic(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
-const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), { ssr: false });
-const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
-const Polyline = dynamic(() => import('react-leaflet').then((mod) => mod.Polyline), { ssr: false });
-const CircleMarker = dynamic(() => import('react-leaflet').then((mod) => mod.CircleMarker), { ssr: false });
+const MapContainer = dynamic(
+  () => import('react-leaflet').then((mod) => mod.MapContainer),
+  { ssr: false }
+);
+const TileLayer = dynamic(
+  () => import('react-leaflet').then((mod) => mod.TileLayer),
+  { ssr: false }
+);
+const Marker = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Marker),
+  { ssr: false }
+);
+const Popup = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Popup),
+  { ssr: false }
+);
+const Polyline = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Polyline),
+  { ssr: false }
+);
+const CircleMarker = dynamic(
+  () => import('react-leaflet').then((mod) => mod.CircleMarker),
+  { ssr: false }
+);
 
 const MapController = dynamic(
   () =>
@@ -20,7 +38,7 @@ const MapController = dynamic(
       return function Controller({
         bounds,
         center,
-        followMode
+        followMode,
       }: {
         bounds: [number, number][] | null;
         center: [number, number] | null;
@@ -30,7 +48,7 @@ const MapController = dynamic(
 
         useEffect(() => {
           if (bounds && bounds.length > 1) {
-            map.flyToBounds(bounds, { padding: [60, 60], duration: 1.2 });
+            map.flyToBounds(bounds, { padding: [48, 48], duration: 1.2 });
           }
         }, [bounds, map]);
 
@@ -69,9 +87,9 @@ export default function MapViewport({
   wsLive,
   routeDelayMinutes,
   onToggleFollow,
-  onSelectBus
+  onSelectBus,
 }: MapViewportProps) {
-  const [busIcon, setBusIcon] = useState<any>(null);
+  const [busIcon, setBusIcon] = useState<unknown>(null);
 
   useEffect(() => {
     import('leaflet').then((L) => {
@@ -86,65 +104,73 @@ export default function MapViewport({
           </div>
         `,
         iconSize: [40, 40],
-        iconAnchor: [20, 20]
+        iconAnchor: [20, 20],
       });
       setBusIcon(icon);
     });
   }, []);
 
-  const liveEtaMinutes = computePredictedEta(
-    activeRoute.stops[0],
-    0,
-    activeBus.speed,
-    routeDelayMinutes
-  );
+  const firstStop = activeRoute?.stops?.[0];
+  const liveEtaMinutes = firstStop
+    ? computePredictedEta(firstStop, 0, activeBus.speed, routeDelayMinutes)
+    : 5;
 
   return (
-    <div className="flex-1 relative">
+    <div className="flex-1 min-h-[300px] relative w-full h-full">
       {activeBus && (
-        <div className="absolute top-4 right-4 z-[1000] bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-2xl p-4 shadow-2xl w-80">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-3">
-            <div className="flex items-center gap-2">
+        <div className="absolute bottom-3 left-3 right-3 sm:bottom-auto sm:left-auto sm:top-4 sm:right-4 z-[1000] bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-2xl p-3 sm:p-4 shadow-2xl sm:w-80">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2.5">
+            <div className="flex items-center gap-2 min-w-0">
               <Radio
-                className={`w-4 h-4 ${
+                className={`w-4 h-4 shrink-0 ${
                   wsLive ? 'text-emerald-400 animate-pulse' : 'text-blue-400'
                 }`}
               />
-              <span className="font-bold text-sm text-white">{activeBus.vehicle_plate}</span>
+              <span className="font-bold text-xs sm:text-sm text-white truncate">
+                {activeBus.vehicle_plate}
+              </span>
             </div>
-            <span className="text-xs font-mono px-2 py-0.5 rounded bg-blue-600 text-white font-semibold">
+            <span className="text-[11px] sm:text-xs font-mono px-2 py-0.5 rounded bg-blue-600 text-white font-semibold shrink-0">
               {activeBus.route_code}
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="bg-slate-950/80 rounded-lg p-2 border border-slate-800">
-              <Gauge className="w-3.5 h-3.5 text-emerald-400 mx-auto mb-1" />
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-2 text-center">
+            <div className="bg-slate-950/80 rounded-lg p-1.5 sm:p-2 border border-slate-800">
+              <Gauge className="w-3.5 h-3.5 text-emerald-400 mx-auto mb-0.5" />
               <p className="text-xs font-bold font-mono text-white">
                 {activeBus.speed.toFixed(1)}
               </p>
               <p className="text-[10px] text-slate-400">km/h</p>
             </div>
-            <div className="bg-slate-950/80 rounded-lg p-2 border border-slate-800">
-              <Clock className="w-3.5 h-3.5 text-blue-400 mx-auto mb-1" />
-              <p className="text-xs font-bold font-mono text-white">{liveEtaMinutes} min</p>
+            <div className="bg-slate-950/80 rounded-lg p-1.5 sm:p-2 border border-slate-800">
+              <Clock className="w-3.5 h-3.5 text-blue-400 mx-auto mb-0.5" />
+              <p className="text-xs font-bold font-mono text-white">
+                {liveEtaMinutes} min
+              </p>
               <p className="text-[10px] text-slate-400">AI ETA</p>
             </div>
-            <div className="bg-slate-950/80 rounded-lg p-2 border border-slate-800">
-              <MapPin className="w-3.5 h-3.5 text-amber-400 mx-auto mb-1" />
-              <p className="text-xs font-bold font-mono text-white">{activeBus.occupancy}</p>
+            <div className="bg-slate-950/80 rounded-lg p-1.5 sm:p-2 border border-slate-800">
+              <MapPin className="w-3.5 h-3.5 text-amber-400 mx-auto mb-0.5" />
+              <p className="text-xs font-bold font-mono text-white">
+                {activeBus.occupancy}
+              </p>
               <p className="text-[10px] text-slate-400">Load</p>
             </div>
           </div>
 
-          <div className="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-mono">
-            <span>
-              GPS: {activeBus.latitude.toFixed(4)}, {activeBus.longitude.toFixed(4)}
+          <div className="mt-2.5 pt-2 border-t border-slate-800 flex items-center justify-between gap-2 text-[10px] sm:text-[11px] text-slate-400 font-mono">
+            <span className="truncate">
+              GPS: {activeBus.latitude.toFixed(4)},{' '}
+              {activeBus.longitude.toFixed(4)}
             </span>
             <button
+              type="button"
               onClick={onToggleFollow}
-              className={`px-2 py-0.5 rounded font-sans font-semibold ${
-                followBus ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'
+              className={`min-h-[28px] px-2.5 py-1 rounded font-sans font-semibold shrink-0 transition ${
+                followBus
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
             >
               {followBus ? 'Following' : 'Free Pan'}
@@ -160,11 +186,15 @@ export default function MapViewport({
         style={{ width: '100%', height: '100%', background: '#020617' }}
         attributionControl={false}
       >
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={19} />
-
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
+        />
         <MapController
           bounds={mapBounds}
-          center={activeBus ? [activeBus.latitude, activeBus.longitude] : null}
+          center={
+            activeBus ? [activeBus.latitude, activeBus.longitude] : null
+          }
           followMode={followBus}
         />
 
@@ -180,23 +210,28 @@ export default function MapViewport({
             positions={breadcrumbs}
             color="#ef4444"
             weight={4}
-            dashArray="6, 8"
+            dashArray="6 8"
             opacity={0.9}
           />
         )}
 
         {activeRoute.stops.map((stop, idx) => {
-          const eta = computePredictedEta(stop, idx, activeBus.speed, routeDelayMinutes);
+          const eta = computePredictedEta(
+            stop,
+            idx,
+            activeBus.speed,
+            routeDelayMinutes
+          );
           return (
             <CircleMarker
-              key={idx}
+              key={`${stop.name}-${idx}`}
               center={stop.coords}
               radius={6}
               pathOptions={{
                 color: '#ffffff',
                 weight: 2,
                 fillColor: activeRoute.color,
-                fillOpacity: 1
+                fillOpacity: 1,
               }}
             >
               <Popup>
@@ -211,14 +246,14 @@ export default function MapViewport({
           );
         })}
 
-        {busIcon &&
+        {Boolean(busIcon) &&
           buses.map((bus) => (
             <Marker
               key={bus.trip_id}
               position={[bus.latitude, bus.longitude]}
-              icon={busIcon}
+              icon={busIcon as never}
               eventHandlers={{
-                click: () => onSelectBus(bus)
+                click: () => onSelectBus(bus),
               }}
             >
               <Popup>
