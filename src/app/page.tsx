@@ -14,6 +14,7 @@ import CommuterPortal from '@/components/CommuterPortal';
 import DriverPortal from '@/components/DriverPortal';
 import AdminPortal from '@/components/AdminPortal';
 import MapViewport from '@/components/MapViewport';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
@@ -226,13 +227,15 @@ export default function HomePage() {
 
   if (!user || !token) {
     return (
-      <AuthGate
-        onAuthenticated={(authenticatedUser, jwtToken) => {
-          setUser(authenticatedUser);
-          setToken(jwtToken);
-          refreshSummary(jwtToken);
-        }}
-      />
+      <ErrorBoundary>
+        <AuthGate
+          onAuthenticated={(authenticatedUser, jwtToken) => {
+            setUser(authenticatedUser);
+            setToken(jwtToken);
+            refreshSummary(jwtToken);
+          }}
+        />
+      </ErrorBoundary>
     );
   }
 
@@ -271,146 +274,151 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row flex-1 min-h-[calc(100dvh-42px)] w-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
-      {/* Portal / Controls Panel */}
-      <div
-        className={`w-full md:w-[430px] md:shrink-0 flex flex-col border-b md:border-b-0 md:border-r border-slate-800 bg-slate-900 z-20 shadow-2xl ${
-          mobileView === 'map'
-            ? 'hidden md:flex md:h-[calc(100dvh-42px)]'
-            : 'flex flex-1 md:flex-initial md:h-[calc(100dvh-42px)] min-h-0'
-        }`}
-      >
-        <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between gap-2 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2.5 bg-blue-600 rounded-xl text-white shadow-lg shadow-blue-600/30 shrink-0">
-              <Compass className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="font-bold text-base sm:text-lg tracking-tight text-white truncate">
-                  Transit Pulse
-                </h1>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30 shrink-0">
-                  {user.role}
-                </span>
+    <ErrorBoundary>
+      <div className="flex flex-col md:flex-row flex-1 min-h-[calc(100dvh-42px)] w-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
+        {/* Portal / Controls Panel */}
+        <div
+          className={`w-full md:w-[430px] md:shrink-0 flex flex-col border-b md:border-b-0 md:border-r border-slate-800 bg-slate-900 z-20 shadow-2xl ${
+            mobileView === 'map'
+              ? 'hidden md:flex md:h-[calc(100dvh-42px)]'
+              : 'flex flex-1 md:flex-initial md:h-[calc(100dvh-42px)] min-h-0'
+          }`}
+        >
+          <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2.5 bg-blue-600 rounded-xl text-white shadow-lg shadow-blue-600/30 shrink-0">
+                <Compass className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <p className="text-xs text-slate-400 truncate">
-                {user.full_name}
-              </p>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="font-bold text-base sm:text-lg tracking-tight text-white truncate">
+                    Transit Pulse
+                  </h1>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30 shrink-0">
+                    {user.role}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 truncate">
+                  {user.full_name}
+                </p>
+              </div>
             </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Sign Out"
+              className="min-h-[38px] min-w-[38px] p-2 rounded-xl bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 transition flex items-center justify-center shrink-0"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleLogout}
-            title="Sign Out"
-            className="min-h-[38px] min-w-[38px] p-2 rounded-xl bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 transition flex items-center justify-center shrink-0"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+          {/* Mobile View Switcher: Controls/Wallet vs Full Map */}
+          <div className="grid grid-cols-2 gap-1.5 p-2 bg-slate-950 border-b border-slate-800/80 md:hidden shrink-0">
+            <button
+              type="button"
+              onClick={() => setMobileView('portal')}
+              className={`min-h-[38px] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                mobileView === 'portal'
+                  ? 'bg-slate-800 text-white border border-slate-700'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Portal &amp; Wallet</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileView('map')}
+              className={`min-h-[38px] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                mobileView === 'map'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <MapIcon className="w-3.5 h-3.5" />
+              <span>Full Live Map</span>
+            </button>
+          </div>
+
+          <ErrorBoundary>
+            {user.role === 'commuter' && (
+              <CommuterPortal
+                token={token}
+                routes={routes}
+                buses={buses}
+                incidents={incidents}
+                selectedRoute={activeRoute}
+                activeBus={activeBus}
+                trackedTripId={trackedTripId}
+                onSelectRoute={handleSelectRoute}
+                onSelectBus={handleSelectBus}
+                onWalletMutated={() => refreshSummary(token)}
+              />
+            )}
+
+            {user.role === 'driver' && (
+              <DriverPortal
+                token={token}
+                routes={routes}
+                incidents={incidents}
+                activeBus={activeBus}
+                driverName={user.full_name}
+                onSelectTrip={handleSelectTripById}
+                onIncidentCreated={() => refreshSummary(token)}
+              />
+            )}
+
+            {user.role === 'admin' && (
+              <AdminPortal
+                token={token}
+                totalFareRevenue={totalFareRevenue}
+                ticketsSoldToday={ticketsSoldToday}
+                incidents={incidents}
+                buses={buses}
+                onSelectBus={handleSelectBus}
+                onIncidentResolved={() => refreshSummary(token)}
+              />
+            )}
+          </ErrorBoundary>
         </div>
 
-        {/* Mobile View Switcher: Controls/Wallet vs Full Map */}
-        <div className="grid grid-cols-2 gap-1.5 p-2 bg-slate-950 border-b border-slate-800/80 md:hidden shrink-0">
-          <button
-            type="button"
-            onClick={() => setMobileView('portal')}
-            className={`min-h-[38px] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-              mobileView === 'portal'
-                ? 'bg-slate-800 text-white border border-slate-700'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>Portal &amp; Wallet</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileView('map')}
-            className={`min-h-[38px] rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-              mobileView === 'map'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <MapIcon className="w-3.5 h-3.5" />
-            <span>Full Live Map</span>
-          </button>
+        {/* Live Map Viewport */}
+        <div
+          className={`flex-1 flex flex-col min-h-0 relative ${
+            mobileView === 'map'
+              ? 'flex h-[calc(100dvh-42px)]'
+              : 'hidden md:flex md:h-[calc(100dvh-42px)]'
+          }`}
+        >
+          <div className="md:hidden absolute top-3 left-3 z-[1001]">
+            <button
+              type="button"
+              onClick={() => setMobileView('portal')}
+              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-900/95 hover:bg-slate-800 text-white border border-slate-700 text-xs font-bold shadow-xl flex items-center gap-1.5"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-blue-400" />
+              <span>Portal &amp; Wallet</span>
+            </button>
+          </div>
+
+          <ErrorBoundary>
+            <MapViewport
+              activeRoute={activeRoute}
+              activeBus={activeBus}
+              buses={buses}
+              breadcrumbs={breadcrumbs}
+              mapBounds={mapBounds}
+              followBus={followBus}
+              wsLive={wsLive}
+              routeDelayMinutes={routeDelayMinutes}
+              onToggleFollow={() => setFollowBus(!followBus)}
+              onSelectBus={handleSelectBus}
+            />
+          </ErrorBoundary>
         </div>
-
-        {user.role === 'commuter' && (
-          <CommuterPortal
-            token={token}
-            routes={routes}
-            buses={buses}
-            incidents={incidents}
-            selectedRoute={activeRoute}
-            activeBus={activeBus}
-            trackedTripId={trackedTripId}
-            onSelectRoute={handleSelectRoute}
-            onSelectBus={handleSelectBus}
-            onWalletMutated={() => refreshSummary(token)}
-          />
-        )}
-
-        {user.role === 'driver' && (
-          <DriverPortal
-            token={token}
-            routes={routes}
-            incidents={incidents}
-            activeBus={activeBus}
-            driverName={user.full_name}
-            onSelectTrip={handleSelectTripById}
-            onIncidentCreated={() => refreshSummary(token)}
-          />
-        )}
-
-        {user.role === 'admin' && (
-          <AdminPortal
-            token={token}
-            totalFareRevenue={totalFareRevenue}
-            ticketsSoldToday={ticketsSoldToday}
-            incidents={incidents}
-            buses={buses}
-            onSelectBus={handleSelectBus}
-            onIncidentResolved={() => refreshSummary(token)}
-          />
-        )}
       </div>
-
-      {/* Live Map Viewport */}
-      <div
-        className={`flex-1 flex flex-col min-h-0 relative ${
-          mobileView === 'map'
-            ? 'flex h-[calc(100dvh-42px)]'
-            : 'hidden md:flex md:h-[calc(100dvh-42px)]'
-        }`}
-      >
-        {/* Floating bar on mobile map view to jump straight back to Portal & Wallet */}
-        <div className="md:hidden absolute top-3 left-3 z-[1001]">
-          <button
-            type="button"
-            onClick={() => setMobileView('portal')}
-            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-900/95 hover:bg-slate-800 text-white border border-slate-700 text-xs font-bold shadow-xl flex items-center gap-1.5"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-400" />
-            <span>Portal &amp; Wallet</span>
-          </button>
-        </div>
-
-        <MapViewport
-          activeRoute={activeRoute}
-          activeBus={activeBus}
-          buses={buses}
-          breadcrumbs={breadcrumbs}
-          mapBounds={mapBounds}
-          followBus={followBus}
-          wsLive={wsLive}
-          routeDelayMinutes={routeDelayMinutes}
-          onToggleFollow={() => setFollowBus(!followBus)}
-          onSelectBus={handleSelectBus}
-        />
-      </div>
-    </div>
+    </ErrorBoundary>
   );
 }

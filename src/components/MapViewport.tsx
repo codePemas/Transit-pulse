@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 import { Radio, Gauge, Clock, MapPin } from 'lucide-react';
@@ -45,16 +45,30 @@ const MapController = dynamic(
         followMode: boolean;
       }) {
         const map = useMap();
+        const lastBoundsKeyRef = useRef<string>('');
+        const lastPanTimeRef = useRef<number>(0);
 
         useEffect(() => {
-          if (bounds && bounds.length > 1) {
-            map.flyToBounds(bounds, { padding: [48, 48], duration: 1.2 });
+          if (!bounds || bounds.length <= 1) return;
+          const key = JSON.stringify(bounds);
+          if (key === lastBoundsKeyRef.current) return;
+          lastBoundsKeyRef.current = key;
+          try {
+            map.flyToBounds(bounds, { padding: [40, 40], duration: 0.9 });
+          } catch {
+            // Ignore map transition errors during unmount
           }
         }, [bounds, map]);
 
         useEffect(() => {
-          if (followMode && center) {
-            map.panTo(center, { animate: true, duration: 0.8 });
+          if (!followMode || !center) return;
+          const now = Date.now();
+          if (now - lastPanTimeRef.current < 1500) return;
+          lastPanTimeRef.current = now;
+          try {
+            map.panTo(center, { animate: true, duration: 0.7 });
+          } catch {
+            // Ignore pan errors during unmount
           }
         }, [center, followMode, map]);
 
@@ -92,27 +106,36 @@ export default function MapViewport({
   const [busIcon, setBusIcon] = useState<unknown>(null);
 
   useEffect(() => {
+    let active = true;
     import('leaflet').then((L) => {
+      if (!active) return;
       const icon = L.divIcon({
         className: 'custom-bus-marker',
         html: `
-          <div style="position:relative;display:flex;align-items:center;justify-content:center;width:40px;height:40px;">
-            <span style="position:absolute;width:40px;height:40px;border-radius:9999px;background:rgba(59,130,246,0.35);animation:ping 1.8s cubic-bezier(0,0,0.2,1) infinite;"></span>
-            <div style="position:relative;width:32px;height:32px;border-radius:9999px;background:#2563eb;border:3px solid #ffffff;box-shadow:0 4px 14px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:11px;">
+          <div style="position:relative;display:flex;align-items:center;justify-content:center;width:36px;height:36px;">
+            <div style="position:relative;width:30px;height:30px;border-radius:9999px;background:#2563eb;border:2.5px solid #ffffff;box-shadow:0 4px 12px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:10px;">
               BUS
             </div>
           </div>
         `,
-        iconSize: [40, 40],
-        iconAnchor: [20, 20],
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
       });
       setBusIcon(icon);
     });
+    return () => {
+      active = false;
+    };
   }, []);
 
+  const safeSpeed = typeof activeBus?.speed === 'number' ? activeBus.speed : 0;
+  const safeLat =
+    typeof activeBus?.latitude === 'number' ? activeBus.latitude : -32.92;
+  const safeLng =
+    typeof activeBus?.longitude === 'number' ? activeBus.longitude : 27.9;
   const firstStop = activeRoute?.stops?.[0];
   const liveEtaMinutes = firstStop
-    ? computePredictedEta(firstStop, 0, activeBus.speed, routeDelayMinutes)
+    ? computePredictedEta(firstStop, 0, safeSpeed, routeDelayMinutes)
     : 5;
 
   return (
@@ -139,7 +162,7 @@ export default function MapViewport({
             <div className="bg-slate-950/80 rounded-lg p-1.5 sm:p-2 border border-slate-800">
               <Gauge className="w-3.5 h-3.5 text-emerald-400 mx-auto mb-0.5" />
               <p className="text-xs font-bold font-mono text-white">
-                {activeBus.speed.toFixed(1)}
+                {safeSpeed.toFixed(1)}
               </p>
               <p className="text-[10px] text-slate-400">km/h</p>
             </div>
@@ -153,7 +176,7 @@ export default function MapViewport({
             <div className="bg-slate-950/80 rounded-lg p-1.5 sm:p-2 border border-slate-800">
               <MapPin className="w-3.5 h-3.5 text-amber-400 mx-auto mb-0.5" />
               <p className="text-xs font-bold font-mono text-white">
-                {activeBus.occupancy}
+                {activeBus.occupancy || 'N/A'}
               </p>
               <p className="text-[10px] text-slate-400">Load</p>
             </div>
@@ -161,8 +184,7 @@ export default function MapViewport({
 
           <div className="mt-2.5 pt-2 border-t border-slate-800 flex items-center justify-between gap-2 text-[10px] sm:text-[11px] text-slate-400 font-mono">
             <span className="truncate">
-              GPS: {activeBus.latitude.toFixed(4)},{' '}
-              {activeBus.longitude.toFixed(4)}
+              GPS: {safeLat.toFixed(4)}, {safeLng.toFixed(4)}
             </span>
             <button
               type="button"
@@ -192,20 +214,21 @@ export default function MapViewport({
         />
         <MapController
           bounds={mapBounds}
-          center={
-            activeBus ? [activeBus.latitude, activeBus.longitude] : null
-          }
+          center={activeBus ? [safeLat, safeLng] : null}
           followMode={followBus}
         />
 
-        <Polyline
-          positions={activeRoute.coordinates}
-          color={activeRoute.color}
-          weight={6}
-          opacity={0.85}
-        />
+        {Array.isArray(activeRoute?.coordinates) &&
+          activeRoute.coordinates.length > 1 && (
+            <Polyline
+              positions={activeRoute.coordinates}
+              color={activeRoute.color || '#3b82f6'}
+              weight={6}
+              opacity={0.85}
+            />
+          )}
 
-        {breadcrumbs.length > 1 && (
+        {Array.isArray(breadcrumbs) && breadcrumbs.length > 1 && (
           <Polyline
             positions={breadcrumbs}
             color="#ef4444"
@@ -215,58 +238,69 @@ export default function MapViewport({
           />
         )}
 
-        {activeRoute.stops.map((stop, idx) => {
-          const eta = computePredictedEta(
-            stop,
-            idx,
-            activeBus.speed,
-            routeDelayMinutes
-          );
-          return (
-            <CircleMarker
-              key={`${stop.name}-${idx}`}
-              center={stop.coords}
-              radius={6}
-              pathOptions={{
-                color: '#ffffff',
-                weight: 2,
-                fillColor: activeRoute.color,
-                fillOpacity: 1,
-              }}
-            >
-              <Popup>
-                <div className="text-slate-900 font-sans">
-                  <p className="font-bold text-xs">{stop.name}</p>
-                  <p className="text-[11px] text-blue-600 font-semibold mt-0.5">
-                    AI Predicted Arrival: {eta} mins ({stop.confidence}% conf.)
-                  </p>
-                </div>
-              </Popup>
-            </CircleMarker>
-          );
-        })}
+        {Array.isArray(activeRoute?.stops) &&
+          activeRoute.stops.map((stop, idx) => {
+            const eta = computePredictedEta(
+              stop,
+              idx,
+              safeSpeed,
+              routeDelayMinutes
+            );
+            return (
+              <CircleMarker
+                key={`${stop.name}-${idx}`}
+                center={stop.coords}
+                radius={6}
+                pathOptions={{
+                  color: '#ffffff',
+                  weight: 2,
+                  fillColor: activeRoute.color || '#3b82f6',
+                  fillOpacity: 1,
+                }}
+              >
+                <Popup>
+                  <div className="text-slate-900 font-sans">
+                    <p className="font-bold text-xs">{stop.name}</p>
+                    <p className="text-[11px] text-blue-600 font-semibold mt-0.5">
+                      AI Predicted Arrival: {eta} mins ({stop.confidence}% conf.)
+                    </p>
+                  </div>
+                </Popup>
+              </CircleMarker>
+            );
+          })}
 
         {Boolean(busIcon) &&
-          buses.map((bus) => (
-            <Marker
-              key={bus.trip_id}
-              position={[bus.latitude, bus.longitude]}
-              icon={busIcon as never}
-              eventHandlers={{
-                click: () => onSelectBus(bus),
-              }}
-            >
-              <Popup>
-                <div className="p-1 text-slate-900 font-sans">
-                  <p className="font-bold text-sm">{bus.vehicle_plate}</p>
-                  <p className="text-xs text-slate-600">{bus.route_name}</p>
-                  <p className="text-xs font-mono font-semibold text-blue-600 mt-1">
-                    Speed: {bus.speed.toFixed(1)} km/h | Load: {bus.occupancy}
-                  </p>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+          Array.isArray(buses) &&
+          buses.map((bus) => {
+            if (
+              typeof bus.latitude !== 'number' ||
+              typeof bus.longitude !== 'number'
+            ) {
+              return null;
+            }
+            return (
+              <Marker
+                key={bus.trip_id}
+                position={[bus.latitude, bus.longitude]}
+                icon={busIcon as never}
+                eventHandlers={{
+                  click: () => onSelectBus(bus),
+                }}
+              >
+                <Popup>
+                  <div className="p-1 text-slate-900 font-sans">
+                    <p className="font-bold text-sm">{bus.vehicle_plate}</p>
+                    <p className="text-xs text-slate-600">{bus.route_name}</p>
+                    <p className="text-xs font-mono font-semibold text-blue-600 mt-1">
+                      Speed: {(typeof bus.speed === 'number' ? bus.speed : 0).toFixed(1)}{' '}
+                      km/h | Load: {bus.occupancy || 'N/A'}
+                    </p>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
       </MapContainer>
     </div>
   );
