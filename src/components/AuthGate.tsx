@@ -1,7 +1,15 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Compass, Lock, User, ShieldCheck, KeyRound, AlertCircle, UserPlus } from 'lucide-react';
+import {
+  Compass,
+  Lock,
+  User,
+  ShieldCheck,
+  KeyRound,
+  AlertCircle,
+  UserPlus,
+} from 'lucide-react';
 import { AuthUser, UserRole } from '@/types/transit';
 
 interface AuthGateProps {
@@ -11,15 +19,41 @@ interface AuthGateProps {
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
 
+function formatApiError(detail: unknown, fallback: string): string {
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail;
+  }
+  if (Array.isArray(detail) && detail.length > 0) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && 'msg' in item) {
+          const loc =
+            'loc' in item && Array.isArray(item.loc)
+              ? `${item.loc.slice(1).join('.')}: `
+              : '';
+          return `${loc}${String(item.msg)}`;
+        }
+        return null;
+      })
+      .filter((msg): msg is string => Boolean(msg));
+    if (messages.length > 0) {
+      return messages.join(' | ');
+    }
+  }
+  if (detail && typeof detail === 'object') {
+    return JSON.stringify(detail);
+  }
+  return fallback;
+}
+
 export default function AuthGate({ onAuthenticated }: AuthGateProps) {
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [selectedRole, setSelectedRole] = useState<UserRole>('commuter');
-
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [accessCode, setAccessCode] = useState('');
-
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -30,52 +64,92 @@ export default function AuthGate({ onAuthenticated }: AuthGateProps) {
 
     try {
       const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
+      const trimmedEmail = email.trim();
+      const trimmedName = fullName.trim();
+      const trimmedCode = accessCode.trim();
+
       const payload =
         authMode === 'login'
-          ? { email, password, role: selectedRole }
-          : {
-              full_name: fullName,
-              email,
+          ? {
+              email: trimmedEmail,
               password,
               role: selectedRole,
-              access_code: selectedRole !== 'commuter' ? accessCode : null
+            }
+          : {
+              full_name: trimmedName,
+              email: trimmedEmail,
+              password,
+              role: selectedRole,
+              access_code: selectedRole !== 'commuter' ? trimmedCode : null,
             };
 
       const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: Record<string, unknown> | null = null;
 
-      if (!res.ok) {
-        throw new Error(data.detail || 'Authentication failed. Please check your credentials.');
+      if (rawText) {
+        try {
+          data = JSON.parse(rawText) as Record<string, unknown>;
+        } catch {
+          throw new Error(
+            `Server returned an unexpected response (${res.status}). Check backend URL or logs.`
+          );
+        }
       }
 
-      sessionStorage.setItem('tp_jwt', data.access_token);
-      sessionStorage.setItem('tp_user', JSON.stringify(data.user));
-      onAuthenticated(data.user, data.access_token);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Unable to connect to authentication server.');
+      if (!res.ok) {
+        throw new Error(
+          formatApiError(
+            data?.detail,
+            'Authentication failed. Please check your credentials.'
+          )
+        );
+      }
+
+      const accessToken =
+        typeof data?.access_token === 'string' ? data.access_token : '';
+      const user = data?.user as AuthUser | undefined;
+
+      if (!accessToken || !user) {
+        throw new Error('Authentication response was missing token or user data.');
+      }
+
+      sessionStorage.setItem('tp_jwt', accessToken);
+      sessionStorage.setItem('tp_user', JSON.stringify(user));
+      onAuthenticated(user, accessToken);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setErrorMsg(err.message || 'Unable to connect to authentication server.');
+      } else {
+        setErrorMsg('Unable to connect to authentication server.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-slate-950 text-slate-100 font-sans relative overflow-hidden p-4">
+    <div className="flex min-h-screen w-full items-center justify-center bg-slate-950 text-slate-100 font-sans relative overflow-x-hidden p-4">
       <div className="absolute w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-3xl pointer-events-none -top-32 -left-32" />
       <div className="absolute w-[600px] h-[600px] bg-emerald-600/10 rounded-full blur-3xl pointer-events-none -bottom-32 -right-32" />
 
-      <div className="w-full max-w-md p-8 bg-slate-900/95 backdrop-blur-xl border border-slate-800 rounded-3xl shadow-2xl z-10">
+      <div className="w-full max-w-md p-6 sm:p-8 bg-slate-900/95 backdrop-blur-xl border border-slate-800 rounded-3xl shadow-2xl z-10">
         <div className="flex items-center gap-3.5 mb-6">
           <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg shadow-blue-600/30">
             <Compass className="w-7 h-7" />
           </div>
           <div>
-            <h1 className="font-extrabold text-xl tracking-tight text-white">Transit Pulse</h1>
-            <p className="text-xs text-slate-400">Buffalo City Fleet Management OS</p>
+            <h1 className="font-extrabold text-xl tracking-tight text-white">
+              Transit Pulse
+            </h1>
+            <p className="text-xs text-slate-400">
+              Buffalo City Fleet Management OS
+            </p>
           </div>
         </div>
 
@@ -128,7 +202,9 @@ export default function AuthGate({ onAuthenticated }: AuthGateProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           {authMode === 'signup' && (
             <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">Full Name</label>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Full Name
+              </label>
               <div className="relative">
                 <UserPlus className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
                 <input
@@ -145,7 +221,9 @@ export default function AuthGate({ onAuthenticated }: AuthGateProps) {
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1.5">Email Address</label>
+            <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+              Email Address
+            </label>
             <div className="relative">
               <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
               <input
@@ -171,7 +249,7 @@ export default function AuthGate({ onAuthenticated }: AuthGateProps) {
                 minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="........"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-10 pr-4 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 transition"
               />
             </div>
@@ -191,7 +269,11 @@ export default function AuthGate({ onAuthenticated }: AuthGateProps) {
                   required
                   value={accessCode}
                   onChange={(e) => setAccessCode(e.target.value)}
-                  placeholder={selectedRole === 'driver' ? 'e.g. EC-DRV-2026' : 'e.g. BCM-OPS-2026'}
+                  placeholder={
+                    selectedRole === 'driver'
+                      ? 'e.g. EC-DRV-2026'
+                      : 'e.g. BCM-OPS-2026'
+                  }
                   className="w-full bg-slate-950 border border-amber-500/40 rounded-xl py-3 pl-10 pr-4 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 transition"
                 />
               </div>
@@ -214,7 +296,7 @@ export default function AuthGate({ onAuthenticated }: AuthGateProps) {
 
         <div className="mt-6 pt-4 border-t border-slate-800 text-center">
           <p className="text-[11px] text-slate-500">
-            Cryptographic Bcrypt & JWT Role-Based Access Control
+            Cryptographic Bcrypt &amp; JWT Role-Based Access Control
           </p>
         </div>
       </div>
