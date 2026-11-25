@@ -19,6 +19,15 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
 
+interface BusOccupancyRecord {
+  trip_id: number;
+  vehicle_plate: string;
+  route_code: string;
+  passengers_onboard: number;
+  capacity: number;
+  occupancy: string;
+}
+
 function getWsBase(apiBase: string): string {
   if (apiBase.startsWith('https://')) {
     return apiBase.replace('https://', 'wss://');
@@ -43,8 +52,8 @@ export default function HomePage() {
   const [followBus, setFollowBus] = useState<boolean>(true);
   const [wsLive, setWsLive] = useState<boolean>(false);
 
-  const [totalFareRevenue, setTotalFareRevenue] = useState<number>(71040.0);
-  const [ticketsSoldToday, setTicketsSoldToday] = useState<number>(3840);
+  const [totalFareRevenue, setTotalFareRevenue] = useState<number>(0);
+  const [ticketsSoldToday, setTicketsSoldToday] = useState<number>(0);
   const [incidents, setIncidents] = useState<FleetIncident[]>([]);
 
   const [buses, setBuses] = useState<BusTelemetry[]>([
@@ -55,9 +64,9 @@ export default function HomePage() {
       route_code: 'RT-01',
       latitude: -32.7875,
       longitude: 27.9116,
-      speed: 48.5,
+      speed: 0,
       heading: 165,
-      occupancy: '68%',
+      occupancy: '0%',
     },
     {
       trip_id: 2,
@@ -66,9 +75,9 @@ export default function HomePage() {
       route_code: 'RT-02',
       latitude: -32.9560,
       longitude: 27.8050,
-      speed: 54.0,
+      speed: 0,
       heading: 115,
-      occupancy: '82%',
+      occupancy: '0%',
     },
     {
       trip_id: 3,
@@ -77,9 +86,9 @@ export default function HomePage() {
       route_code: 'RT-03',
       latitude: -32.9650,
       longitude: 27.9400,
-      speed: 39.2,
+      speed: 0,
       heading: 210,
-      occupancy: '45%',
+      occupancy: '0%',
     },
   ]);
 
@@ -90,6 +99,16 @@ export default function HomePage() {
 
   const wsTrackRef = useRef<WebSocket | null>(null);
   const wsEventsRef = useRef<WebSocket | null>(null);
+
+  const applyOccupancyList = (list: BusOccupancyRecord[]) => {
+    if (!Array.isArray(list) || list.length === 0) return;
+    setBuses((prev) =>
+      prev.map((bus) => {
+        const match = list.find((item) => item.trip_id === bus.trip_id);
+        return match ? { ...bus, occupancy: match.occupancy } : bus;
+      })
+    );
+  };
 
   const refreshSummary = async (authToken: string) => {
     try {
@@ -107,8 +126,11 @@ export default function HomePage() {
       if (Array.isArray(data.incidents)) {
         setIncidents(data.incidents);
       }
+      if (Array.isArray(data.bus_occupancies)) {
+        applyOccupancyList(data.bus_occupancies);
+      }
     } catch {
-      // Keep current UI state if backend is momentarily sleeping or unreachable
+      // Keep current UI state if backend is momentarily unreachable
     }
   };
 
@@ -199,6 +221,9 @@ export default function HomePage() {
         if (Array.isArray(msg.incidents)) {
           setIncidents(msg.incidents);
         }
+        if (Array.isArray(msg.bus_occupancies)) {
+          applyOccupancyList(msg.bus_occupancies);
+        }
       } catch {
         // Ignore malformed event packet
       }
@@ -276,7 +301,6 @@ export default function HomePage() {
   return (
     <ErrorBoundary>
       <div className="flex flex-col md:flex-row flex-1 min-h-[calc(100dvh-42px)] w-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
-        {/* Portal / Controls Panel */}
         <div
           className={`w-full md:w-[430px] md:shrink-0 flex flex-col border-b md:border-b-0 md:border-r border-slate-800 bg-slate-900 z-20 shadow-2xl ${
             mobileView === 'map'
@@ -314,7 +338,6 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* Mobile View Switcher: Controls/Wallet vs Full Map */}
           <div className="grid grid-cols-2 gap-1.5 p-2 bg-slate-950 border-b border-slate-800/80 md:hidden shrink-0">
             <button
               type="button"
@@ -384,7 +407,6 @@ export default function HomePage() {
           </ErrorBoundary>
         </div>
 
-        {/* Live Map Viewport */}
         <div
           className={`flex-1 flex flex-col min-h-0 relative ${
             mobileView === 'map'

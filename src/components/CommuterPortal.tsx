@@ -17,6 +17,7 @@ import {
   ArrowDownLeft,
   WifiOff,
   RefreshCw,
+  Bus,
 } from 'lucide-react';
 import { RouteItem, BusTelemetry, FleetIncident } from '@/types/transit';
 
@@ -34,7 +35,7 @@ interface WalletTicketItem {
 
 interface WalletTransactionItem {
   id: number | string;
-  tx_type: 'TOPUP' | 'TICKET_PURCHASE' | string;
+  tx_type: 'TOPUP' | 'TICKET_PURCHASE' | 'BOARDING' | string;
   title: string;
   amount_zar: number;
   created_at: string;
@@ -101,7 +102,7 @@ export default function CommuterPortal({
     const raw = (route as unknown as Record<string, unknown>).frequency;
     return typeof raw === 'string' && raw.trim()
       ? raw
-      : 'Peak every 15 mins';
+      : 'Scheduled corridor service';
   };
 
   const getStopBaseEta = (stop: unknown, index: number): number => {
@@ -301,6 +302,51 @@ export default function CommuterPortal({
     }
   };
 
+  const handleBoardBusDemo = async (bus: BusTelemetry) => {
+    const actionKey = `board-${bus.trip_id}`;
+    if (isAnyBusy) return;
+    setBusyAction(actionKey);
+    setFeedback(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/ops/buses/${bus.trip_id}/board`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ passengers: 1 }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setFeedback({
+          type: 'err',
+          text: data?.detail || `Could not board ${bus.vehicle_plate}.`,
+        });
+      } else {
+        setBackendOffline(false);
+        onSelectBus(bus);
+        onWalletMutated();
+        await fetchWallet(true);
+        setFeedback({
+          type: 'ok',
+          text:
+            data?.message ||
+            `Boarded ${bus.vehicle_plate}. Occupancy updated in database.`,
+        });
+      }
+    } catch {
+      setBackendOffline(true);
+      setFeedback({
+        type: 'err',
+        text: 'Backend unreachable while boarding bus.',
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   const handleCopyCode = (code: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(code).catch(() => {});
@@ -335,7 +381,6 @@ export default function CommuterPortal({
         </div>
       )}
 
-      {/* Thumb-friendly Mode Switcher */}
       <div className="grid grid-cols-2 p-2.5 sm:p-3 gap-2 border-b border-slate-800 bg-slate-950/60 shrink-0">
         <button
           type="button"
@@ -362,6 +407,23 @@ export default function CommuterPortal({
           <span>Fare Wallet &amp; QR</span>
         </button>
       </div>
+
+      {feedback && (
+        <div
+          className={`mx-3.5 sm:mx-4 mt-3 p-3 rounded-xl border text-xs flex items-start gap-2 shrink-0 ${
+            feedback.type === 'ok'
+              ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-200'
+              : 'bg-rose-500/15 border-rose-500/35 text-rose-200'
+          }`}
+        >
+          {feedback.type === 'ok' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+          )}
+          <span className="leading-snug">{feedback.text}</span>
+        </div>
+      )}
 
       {activeTab === 'map' ? (
         <div className="flex-1 overflow-y-auto divide-y divide-slate-800/80">
@@ -426,44 +488,67 @@ export default function CommuterPortal({
             </div>
           </div>
 
-          {/* Live Fleet */}
-          <div className="p-3.5 sm:p-4 bg-slate-900/40">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
-              <Navigation className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-              Live Municipal Fleet
-            </h2>
-            <div className="grid grid-cols-3 gap-2">
+          {/* Live Fleet + Demo Boarding */}
+          <div className="p-3.5 sm:p-4 bg-slate-900/40 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Navigation className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                Live Municipal Fleet
+              </h2>
+              <span className="text-[10px] font-mono text-slate-400">
+                Persisted Load
+              </span>
+            </div>
+
+            <div className="space-y-2">
               {buses.map((bus, bIdx) => {
                 const isSelected = bus.trip_id === trackedTripId;
+                const isBoardingThis = busyAction === `board-${bus.trip_id}`;
                 return (
-                  <button
-                    type="button"
+                  <div
                     key={`${bus.trip_id}-${bus.vehicle_plate}-${bIdx}`}
-                    onClick={() => onSelectBus(bus)}
-                    className={`min-h-[56px] p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                    className={`p-3 rounded-xl border transition flex items-center justify-between gap-2 ${
                       isSelected
-                        ? 'bg-blue-600/20 border-blue-500 text-white'
-                        : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                        ? 'bg-blue-600/15 border-blue-500/70'
+                        : 'bg-slate-950/60 border-slate-800'
                     }`}
                   >
-                    <p className="text-[11px] font-bold text-slate-200 truncate">
-                      {bus.vehicle_plate}
-                    </p>
-                    <div className="flex items-center justify-between gap-1 mt-1">
-                      <span className="text-[10px] font-mono text-blue-400">
-                        {bus.route_code}
-                      </span>
-                      <span className="text-[10px] text-slate-500">
-                        {bus.occupancy}
-                      </span>
-                    </div>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => onSelectBus(bus)}
+                      className="text-left min-w-0 flex-1"
+                    >
+                      <p className="text-xs font-bold text-slate-100 truncate">
+                        {bus.vehicle_plate}{' '}
+                        <span className="text-blue-400 font-mono">
+                          {bus.route_code}
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Load:{' '}
+                        <span className="font-mono text-amber-300 font-semibold">
+                          {bus.occupancy}
+                        </span>{' '}
+                        • {Number(bus.speed || 0).toFixed(1)} km/h
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isAnyBusy}
+                      onClick={() => handleBoardBusDemo(bus)}
+                      className="min-h-[36px] px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-[11px] font-bold transition flex items-center gap-1.5 shrink-0"
+                    >
+                      <Bus className="w-3.5 h-3.5 shrink-0" />
+                      <span>{isBoardingThis ? 'Boarding...' : 'Get On Bus'}</span>
+                    </button>
+                  </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Aggregated Corridor Advisories & Stop ETAs */}
+          {/* Corridor Advisories & Stop ETAs */}
           <div className="p-3.5 sm:p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
@@ -534,24 +619,6 @@ export default function CommuterPortal({
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-4">
-          {feedback && (
-            <div
-              className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
-                feedback.type === 'ok'
-                  ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-200'
-                  : 'bg-rose-500/15 border-rose-500/35 text-rose-200'
-              }`}
-            >
-              {feedback.type === 'ok' ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              ) : (
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              )}
-              <span className="leading-snug">{feedback.text}</span>
-            </div>
-          )}
-
-          {/* Wallet Card */}
           <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-xl">
             <div className="flex items-center justify-between">
               <span className="text-xs uppercase tracking-wider font-semibold text-blue-100">
@@ -572,7 +639,7 @@ export default function CommuterPortal({
               </button>
             </div>
             <p className="text-2xl sm:text-3xl font-bold font-mono mt-2">
-              R {walletData ? walletData.balance_zar.toFixed(2) : '...'}
+              R {walletData ? walletData.balance_zar.toFixed(2) : '0.00'}
             </p>
             <div className="grid grid-cols-2 gap-2 mt-4">
               <button
@@ -600,7 +667,6 @@ export default function CommuterPortal({
             </div>
           </div>
 
-          {/* Buy Single-Trip Digital Ticket */}
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5">
               Buy Single-Trip Digital Ticket
@@ -638,7 +704,6 @@ export default function CommuterPortal({
             </div>
           </div>
 
-          {/* Active & Recent Passes */}
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5">
               Active &amp; Recent Passes
@@ -650,7 +715,7 @@ export default function CommuterPortal({
             ) : (
               <div className="space-y-2">
                 {walletData.tickets.map((t: WalletTicketItem, tIdx: number) => {
-                  const ticketFare = Number(t.fare_zar ?? t.fare ?? 15);
+                  const ticketFare = Number(t.fare_zar ?? t.fare ?? 0);
                   const validatingThis =
                     busyAction === `validate-${t.ticket_code}`;
                   return (
@@ -717,7 +782,6 @@ export default function CommuterPortal({
             )}
           </div>
 
-          {/* Recent ZAR Wallet Transactions */}
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5">
               Recent Wallet Activity
